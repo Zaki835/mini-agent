@@ -1,375 +1,178 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-void main() {
-  runApp(const MyBrowserApp());
-}
+void main() => runApp(MiniAgentApp());
 
-class MyBrowserApp extends StatelessWidget {
-  const MyBrowserApp({super.key});
-
+class MiniAgentApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Mini Agent Browser',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        scaffoldBackgroundColor: Colors.grey[900],
-        appBarTheme: AppBarTheme(
-          backgroundColor: Colors.grey[850],
-          foregroundColor: Colors.white,
-        ),
-        textTheme: TextTheme(
-          bodyMedium: TextStyle(color: Colors.white),
-        ),
+      title: 'Mini Agent',
+      theme: ThemeData.dark().copyWith(
+        primaryColor: Colors.blue,
+        scaffoldBackgroundColor: Color(0xFF121212),
+        canvasColor: Color(0xFF1E1E1E),
       ),
-      home: const BrowserScreen(),
-      debugShowCheckedModeBanner: false,
+      home: BrowserHome(),
     );
   }
 }
 
-class BrowserScreen extends StatefulWidget {
-  const BrowserScreen({super.key});
-
+class BrowserHome extends StatefulWidget {
   @override
-  _BrowserScreenState createState() => _BrowserScreenState();
+  _BrowserHomeState createState() => _BrowserHomeState();
 }
 
-class _BrowserScreenState extends State<BrowserScreen> {
-  final TextEditingController _urlController = TextEditingController();
-  late WebViewController _webViewController;
-  int _currentTabIndex = 0;
-  final List<TabModel> _tabs = [
-    TabModel(
-      id: '1',
-      title: 'New Tab',
-      url: 'https://www.google.com',
-    )
-  ];
+class _BrowserHomeState extends State<BrowserHome> {
+  List<TabData> tabs = [];
+  int current = 0;
+  String apiKey = "";
 
   @override
   void initState() {
     super.initState();
-    _urlController.text = _tabs[_currentTabIndex].url;
+    _loadApiKey();
+    _addTab("https://example.com");
+  }
+
+  Future _loadApiKey() async {
+    final sp = await SharedPreferences.getInstance();
+    apiKey = sp.getString("apiKey") ?? "";
+    setState(() {});
+  }
+
+  Future _saveApiKey(String key) async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString("apiKey", key);
+    apiKey = key;
+    setState(() {});
+  }
+
+  void _addTab(String url) {
+    tabs.add(TabData(url));
+    current = tabs.length -1;
+    setState(() {});
+  }
+
+  void _closeTab(int idx) {
+    tabs.removeAt(idx);
+    if (current >= tabs.length) current = tabs.length -1;
+    setState(() {});
+  }
+
+  void _openSettingsMenu() {
+    showModalBottomSheet(
+      backgroundColor: Color(0xFF1E1E1E), 
+      context: context,
+      builder: (c) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(leading: Icon(Icons.history), title: Text("History"), onTap: ()=> Navigator.push(context, MaterialPageRoute(builder: (_) => HistoryPage()))),
+          ListTile(leading: Icon(Icons.download), title: Text("Downloads"), onTap: ()=> Navigator.push(context, MaterialPageRoute(builder: (_) => DownloadsPage()))),
+          ListTile(leading: Icon(Icons.lock), title: Text("Password Save"), onTap: ()=> Navigator.push(context, MaterialPageRoute(builder: (_) => PasswordsPage()))),
+        ],
+      )
+    );
+  }
+
+  void _showAiDialog() {
+    final ctrl = TextEditingController(text: apiKey);
+    showDialog(context: context, builder: (_) => AlertDialog(
+      backgroundColor: Color(0xFF1E1E1E),
+      title: Text("My AI", style: TextStyle(color: Colors.white)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(controller: ctrl, obscureText: true, style: TextStyle(color: Colors.white),
+            decoration: InputDecoration(labelText: "API Key", labelStyle: TextStyle(color: Colors.grey))),
+          SizedBox(height: 12),
+          ElevatedButton(onPressed: (){
+            _saveApiKey(ctrl.text);
+            Navigator.pop(context);
+          }, child: Text("Save"))
+        ],
+      ),
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: [
-            IconButton(
-              icon: const Icon(Icons.play_arrow, color: Colors.blue),
-              onPressed: _showAIModal,
-            ),
-            Expanded(
-              child: TextField(
-                controller: _urlController,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: 'Enter URL',
-                  hintStyle: TextStyle(color: Colors.grey[400]),
-                  filled: true,
-                  fillColor: Colors.grey[800],
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+        title: Text("Mini Agent"),
+        actions: [
+          IconButton(icon: Icon(Icons.add), tooltip: "New Tab", onPressed: ()=> _addTab("https://example.com")),
+          IconButton(icon: Icon(Icons.person), tooltip: "My AI", onPressed: _showAiDialog),
+          IconButton(icon: Icon(Icons.settings), tooltip: "Settings", onPressed: _openSettingsMenu),
+        ],
+        bottom: PreferredSize(
+          preferredSize: Size.fromHeight(36),
+          child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(
+            children: List.generate(tabs.length, (i) => GestureDetector(
+              onTap: ()=> setState(() => current = i),
+              child: Container(
+                margin: EdgeInsets.symmetric(horizontal:4, vertical:6),
+                padding: EdgeInsets.symmetric(horizontal:8, vertical:4),
+                decoration: BoxDecoration(
+                  color: i==current? Colors.blue : Colors.grey[800],
+                  borderRadius: BorderRadius.circular(4),
                 ),
-                onSubmitted: (url) => _loadUrl(url),
+                child: Row(children:[
+                  Text("Tab ${i+1}", style: TextStyle(color: Colors.white)),
+                  SizedBox(width:4),
+                  GestureDetector(onTap: ()=> _closeTab(i), child: Icon(Icons.close, size:16, color: Colors.red)),
+                ]),
               ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.more_vert),
-              onPressed: _showMenu,
-            ),
-          ],
+            )),
+          )),
         ),
       ),
-      body: Column(
-        children: [
-          SizedBox(
-            height: 40,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: _tabs.length,
-              itemBuilder: (context, index) {
-                return GestureDetector(
-                  onTap: () => _switchTab(index),
-                  child: Container(
-                    margin: const EdgeInsets.all(4),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: _currentTabIndex == index
-                          ? Colors.blue[800]
-                          : Colors.grey[800],
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          _tabs[index].title,
-                          style: TextStyle(
-                            color: _currentTabIndex == index
-                                ? Colors.white
-                                : Colors.grey[400],
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 16),
-                          color: Colors.grey[400],
-                          onPressed: () => _closeTab(index),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          Expanded(
-            child: WebView(
-              initialUrl: _tabs[_currentTabIndex].url,
-              javascriptMode: JavascriptMode.unrestricted,
-              onWebViewCreated: (controller) {
-                _webViewController = controller;
-              },
-            ),
-          ),
-          Container(
-            color: Colors.grey[850],
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  color: Colors.white,
-                  onPressed: _goBack,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.arrow_forward),
-                  color: Colors.white,
-                  onPressed: _goForward,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.home),
-                  color: Colors.white,
-                  onPressed: _goHome,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh),
-                  color: Colors.white,
-                  onPressed: _reloadPage,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      body: tabs.isEmpty ? Center(child: Text("No tabs", style: TextStyle(color: Colors.white))) :
+        WebView(
+          initialUrl: tabs[current].url,
+          javascriptMode: JavascriptMode.unrestricted,
+          onWebViewCreated: (c)=> tabs[current].controller = c,
+        ),
     );
-  }
-
-  void _loadUrl(String url) {
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      url = 'https://$url';
-    }
-    setState(() {
-      _tabs[_currentTabIndex].url = url;
-      _urlController.text = url;
-    });
-    _webViewController.loadUrl(url);
-  }
-
-  void _switchTab(int index) {
-    setState(() {
-      _currentTabIndex = index;
-      _urlController.text = _tabs[index].url;
-    });
-  }
-
-  void _closeTab(int index) {
-    setState(() {
-      _tabs.removeAt(index);
-      if (_tabs.isEmpty) {
-        _tabs.add(TabModel(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          title: 'New Tab',
-          url: 'https://www.google.com',
-        ));
-      }
-      _currentTabIndex = _currentTabIndex >= _tabs.length ? _tabs.length - 1 : _currentTabIndex;
-    });
-  }
-
-  void _goBack() async {
-    if (await _webViewController.canGoBack()) {
-      await _webViewController.goBack();
-    }
-  }
-
-  void _goForward() async {
-    if (await _webViewController.canGoForward()) {
-      await _webViewController.goForward();
-    }
-  }
-
-  void _goHome() {
-    _loadUrl('https://www.google.com');
-  }
-
-  void _reloadPage() {
-    _webViewController.reload();
-  }
-
-  void _showMenu() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.grey[850],
-      builder: (context) {
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.add, color: Colors.blue),
-              title: const Text('New Tab', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(context);
-                _addNewTab();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.history, color: Colors.blue),
-              title: const Text('History', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(context);
-                // Navigate to history screen
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.download, color: Colors.blue),
-              title: const Text('Downloads', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(context);
-                // Navigate to downloads screen
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.nightlight_round, color: Colors.blue),
-              title: const Text('Dark Mode', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(context);
-                // Toggle dark mode
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showAIModal() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.grey[850],
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'API Key',
-                    labelStyle: TextStyle(color: Colors.grey[400]),
-                    filled: true,
-                    fillColor: Colors.grey[800],
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.visibility),
-                      color: Colors.grey[400],
-                      onPressed: () {},
-                    ),
-                  ),
-                  obscureText: true,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Task',
-                    labelStyle: TextStyle(color: Colors.grey[400]),
-                    filled: true,
-                    fillColor: Colors.grey[800],
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[800],
-                    minimumSize: const Size(double.infinity, 50),
-                  ),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Task completed (simulation)'),
-                      ),
-                    );
-                  },
-                  child: const Text('Run Task'),
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _addNewTab() {
-    setState(() {
-      _tabs.add(TabModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        title: 'New Tab',
-        url: 'https://www.google.com',
-      ));
-      _currentTabIndex = _tabs.length - 1;
-      _urlController.text = _tabs[_currentTabIndex].url;
-    });
   }
 }
 
-class TabModel {
-  final String id;
-  String title;
-  String url;
+class TabData {
+  final String url;
+  WebViewController? controller;
+  TabData(this.url);
+}
 
-  TabModel({
-    required this.id,
-    required this.title,
-    required this.url,
-  });
+/// Placeholder pages
+
+class HistoryPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    // لاحقاً أمكننا إضافة logic لتسجيل وتخزين سجل التصفح
+    return Scaffold(
+      appBar: AppBar(title: Text("History")),
+      body: Center(child: Text("History list here...", style: TextStyle(color: Colors.white))),
+    );
+  }
+}
+
+class DownloadsPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Downloads")),
+      body: Center(child: Text("Downloads list here...", style: TextStyle(color: Colors.white))),
+    );
+  }
+}
+
+class PasswordsPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Passwords")),
+      body: Center(child: Text("Password manager here...", style: TextStyle(color: Colors.white))),
+    );
+  }
 }
